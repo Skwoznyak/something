@@ -24,3 +24,4 @@ https://github.com/Skwoznyak/simple-ps1-script-for-teamcity/tree/publish-docker-
 За сегодня написал .yml файлы, завтра запущу minikube и буду пробовать доделать дз.
 
 для теста
+для теста 2
