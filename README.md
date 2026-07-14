@@ -22,3 +22,5 @@ https://github.com/Skwoznyak/simple-ps1-script-for-teamcity/tree/publish-docker-
 
 второй урок начал, но было уже совсем поздно, не успеваю, продолжу завтра.
 За сегодня написал .yml файлы, завтра запущу minikube и буду пробовать доделать дз.
+
+для теста
