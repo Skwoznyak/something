@@ -26,3 +26,8 @@ https://github.com/Skwoznyak/simple-ps1-script-for-teamcity/tree/publish-docker-
 15.07.2026
 сегодня смотрел видосы по куберу, развернул его в докере, открыл дашборд, запустил сервис, ингрес, деплоймент
 все доступно в этом репо, та весь прогресс по куберу, но в разных ветках https://github.com/Skwoznyak/work-with-k8s
+
+16.07.2026
+файловая система в гит
+https://youtu.be/VUs1mNUBjvk?si=t_E8HHztK9dsCLdp
+![alt text](image.png)
