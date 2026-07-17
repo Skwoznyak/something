@@ -31,3 +31,8 @@ https://github.com/Skwoznyak/simple-ps1-script-for-teamcity/tree/publish-docker-
 файловая система в гит
 https://youtu.be/VUs1mNUBjvk?si=t_E8HHztK9dsCLdp
 ![alt text](image.png)
+
+17.07.2026
+сегодня сделал вторую домашку по куберу, а так же написал огромную шпору по команда с помощью чата гпт, не думаю что она будет мне нужна, но темнемее)
+
+вторая домашка - https://github.com/Skwoznyak/work-with-k8s в ветке up-app-in-k8s
