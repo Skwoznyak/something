@@ -46,3 +46,50 @@ https://youtu.be/VUs1mNUBjvk?si=t_E8HHztK9dsCLdp
 
 лайфцикл кубера
 ![alt text](<ChatGPT Image 20 июл. 2026 г., 10_01_02.png>)
+
+23.07.2026
+процесс CI
+![alt text](image-1.png)
+
+Описание конвейера -
+ .gitlab-ci.yml
+
+stages:
+  - build
+  - test
+
+variables:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+ before_script:
+- GRADLE_USER_HOME="$(pwd)/.gradle"
+- export GRADLE_USER_HOME
+ build:
+  stage: build
+  script: gradle --build-cache assemble
+  cache:
+    key: "$CI_COMMIT_REF_NAME"
+    policy: push
+  paths:
+    - build
+    - .gradle
+test:
+  stage: test
+  script: gradle check
+  cache:
+    key: "$CI_COMMIT_REF_NAME"
+    policy: pull
+  paths:
+  - build
+  - .gradle
+
+выполнение задач
+![alt text](image-2.png)
+
+24.07.2026
+Сегодня наконец-то разобрался и понял логику работы дсо и ифт, как работает билд и деплой
+билд в дсо - собирает новую версию образа и отправляет ее в хранилище
+деплой в дсо - забирает билд по указанной в параметрах версии и после деплоит ее на деве
+потом мы идем в иф
+и там делаем деплой с перекладчиком и все переносится на ифт, а в логах можно посмотреть что и когда запустилось
+
+читаю книгу по линуксу, точнее только начал( уверен что, когда стажировка кончится я не смогу найти другую работу, знаний невероятно мало((
