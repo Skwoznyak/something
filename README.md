@@ -129,8 +129,8 @@ ltrace
 ltrace → какие функции библиотек вызвала программа.
 ```
 
-#шпора по top#
+##шпора по top##
 ![alt text](<ChatGPT Image 26 июл. 2026 г., 15_23_12.png>)
 
-#шпора по htop#
+##шпора по htop##
 ![alt text](<ChatGPT Image 26 июл. 2026 г., 15_24_33.png>)
