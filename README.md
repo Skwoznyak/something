@@ -2239,3 +2239,197 @@ Pods
    ↓
 Kubernetes
 ```
+## 26.08.2026
+
+# ContainerCreating в Kubernetes
+
+`ContainerCreating` — это состояние Pod в Kubernetes, которое означает:
+
+> **Pod уже создан, но Kubernetes ещё не смог запустить контейнер внутри него.**
+
+## Жизненный цикл
+
+Упрощённо процесс выглядит так:
+
+```text
+Deployment
+    ↓
+ReplicaSet
+    ↓
+Pod
+    ↓
+ContainerCreating
+    ↓
+Running
+```
+
+На этапе `ContainerCreating` kubelet на ноде подготавливает всё необходимое перед запуском контейнера.
+
+### Что происходит на этом этапе
+
+Kubernetes может:
+
+* скачать Docker/OCI-образ, если его ещё нет на ноде;
+* создать контейнер через container runtime;
+* смонтировать `ConfigMap`;
+* смонтировать `Secret`;
+* подключить `PersistentVolume`;
+* настроить сеть Pod;
+* применить `securityContext`;
+* подключить необходимые volumes;
+* подготовить namespace и cgroups.
+
+## Если Pod долго находится в `ContainerCreating`
+
+Если Pod несколько секунд находится в `ContainerCreating` — это нормально.
+
+Если он **долго висит** в этом состоянии, нужно искать причину.
+
+Первое, что стоит выполнить:
+
+```bash
+kubectl describe pod <pod-name>
+```
+
+Внизу вывода будет секция:
+
+```text
+Events:
+  Type     Reason     Message
+  ----     ------     -------
+  Normal   Pulling    Pulling image "..."
+  Normal   Pulled     Successfully pulled image
+  Warning  Failed     ...
+```
+
+Именно `Events` обычно показывают, на каком этапе возникла проблема.
+
+## Типичные причины
+
+### Не удалось скачать образ
+
+```text
+Failed to pull image
+```
+
+или:
+
+```text
+ErrImagePull
+```
+
+Возможные причины:
+
+* неправильное имя образа;
+* неправильный тег;
+* нет доступа к registry;
+* не настроен `imagePullSecret`;
+* registry недоступен.
+
+---
+
+### Проблема с Volume
+
+```text
+FailedMount
+```
+
+Возможные причины:
+
+* проблема с `PersistentVolume`;
+* проблема с `PersistentVolumeClaim`;
+* отсутствует `ConfigMap`;
+* отсутствует `Secret`;
+* Kubernetes не может примонтировать volume.
+
+---
+
+### Проблема с сетью Pod
+
+```text
+FailedCreatePodSandBox
+```
+
+Обычно это связано с:
+
+* CNI;
+* сетевым плагином Kubernetes;
+* container runtime;
+* проблемами с настройкой сети ноды.
+
+---
+
+## Важно отличать `ContainerCreating` от `CrashLoopBackOff`
+
+`ContainerCreating` означает, что контейнер **ещё не запустился нормально**.
+
+Например:
+
+```text
+Pod
+ ↓
+ContainerCreating
+```
+
+На этом этапе приложение внутри контейнера может ещё вообще не выполняться.
+
+А вот:
+
+```text
+Pod
+ ↓
+Running
+ ↓
+CrashLoopBackOff
+```
+
+означает, что контейнер уже запускался, но приложение внутри него завершилось с ошибкой, после чего Kubernetes пытается перезапустить его.
+
+## Пример при деплое новой версии
+
+Если CI/CD job выкатывает новую версию сервиса:
+
+```text
+Deployment
+    ↓
+новый ReplicaSet
+    ↓
+новый Pod
+    ↓
+ContainerCreating
+```
+
+В этот момент Kubernetes подготавливает новый Pod.
+
+Если всё успешно:
+
+```text
+ContainerCreating
+    ↓
+Running
+```
+
+Если возникла проблема, Pod может надолго остаться в `ContainerCreating`.
+
+### Что проверять
+
+```bash
+kubectl get pods
+```
+
+Затем:
+
+```bash
+kubectl describe pod <pod-name>
+```
+
+И в первую очередь смотреть:
+
+```text
+Events:
+```
+
+**Ключевая мысль:**
+
+> `ContainerCreating` — это не ошибка само по себе. Это промежуточное состояние, в котором Kubernetes готовит контейнер к запуску. Если состояние длится слишком долго — смотри `kubectl describe pod` и секцию `Events`.
+
