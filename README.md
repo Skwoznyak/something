@@ -2434,4 +2434,559 @@ Events:
 > `ContainerCreating` — это не ошибка само по себе. Это промежуточное состояние, в котором Kubernetes готовит контейнер к запуску. Если состояние длится слишком долго — смотри `kubectl describe pod` и секцию `Events`.
 
 
+## 27.08.2026
+# Пода зависает в статусе Pending
 
+Это значит кубер принял объект под, но контейнеры не начали запускаться. Чаще всего проблема в том, что шедулер не может подобрать ноду или под ждет какой-то ресур.
+На практике помогало через консоль панель кубера убиваьт эти поды и деплоить через орекестрацию\хелм
+
+```
+kubectl get pod <pod-name> -n <namespace> -o wide
+
+kubectl describe pod <pod-name> -n <namespace>
+
+kubectl get nodes
+```
+
+# Kubernetes: Nodes и Affinity
+
+## Что такое Node
+
+**Node (нода)** — это физическая или виртуальная машина, на которой Kubernetes запускает Pod'ы.
+
+Пример кластера:
+
+```text
+Kubernetes Cluster
+│
+├── Node 1
+│   ├── Pod A
+│   └── Pod B
+│
+├── Node 2
+│   ├── Pod C
+│   └── Pod D
+│
+└── Node 3
+    └── Pod E
+```
+
+Когда мы создаём Deployment:
+
+```yaml
+replicas: 3
+```
+
+мы говорим Kubernetes:
+
+> Нужно запустить 3 экземпляра Pod.
+
+Но на каких именно нодах они будут запущены, решает **kube-scheduler**.
+
+Например:
+
+```text
+Node 1 → Pod 1
+Node 2 → Pod 2
+Node 3 → Pod 3
+```
+
+Но Kubernetes может разместить их и так:
+
+```text
+Node 1 → Pod 1, Pod 2
+Node 2 → Pod 3
+Node 3 → пусто
+```
+
+Чтобы влиять на выбор ноды, существуют механизмы:
+
+* `nodeSelector`
+* `Node Affinity`
+* `Pod Affinity`
+* `Pod Anti-Affinity`
+* `Taints / Tolerations`
+* `Topology Spread Constraints`
+
+---
+
+# Affinity
+
+**Affinity** — правила, которые влияют на то, где Kubernetes Scheduler будет размещать Pod.
+
+Основные виды:
+
+```text
+Node Affinity
+Pod Affinity
+Pod Anti-Affinity
+```
+
+---
+
+## 1. Node Affinity
+
+**Node Affinity** задаёт правила связи:
+
+```text
+Pod → Node
+```
+
+Например, есть ноды:
+
+```text
+node-1 → disk=ssd
+node-2 → disk=hdd
+node-3 → disk=ssd
+```
+
+Мы хотим запускать приложение только на нодах с SSD.
+
+```yaml
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: disk
+              operator: In
+              values:
+                - ssd
+```
+
+Scheduler проверит:
+
+```text
+node-1 → disk=ssd → подходит
+node-2 → disk=hdd → НЕ подходит
+node-3 → disk=ssd → подходит
+```
+
+Pod будет запущен на `node-1` или `node-3`.
+
+Если подходящих нод нет:
+
+```text
+Pod → Pending
+```
+
+Например, в `kubectl describe pod` можно увидеть:
+
+```text
+0/5 nodes are available:
+5 node(s) didn't match Pod's node affinity
+```
+
+Это означает, что Scheduler проверил 5 нод и ни одна не удовлетворила требованиям `nodeAffinity`.
+
+---
+
+# 2. Pod Affinity
+
+**Pod Affinity** задаёт связь:
+
+```text
+Pod → другой Pod
+```
+
+То есть мы говорим Kubernetes:
+
+> Размести этот Pod рядом с определёнными Pod'ами.
+
+Например:
+
+```text
+Node 1
+├── Redis
+└── Backend
+```
+
+Мы можем настроить Backend так, чтобы он размещался на той же ноде, где находится Pod с:
+
+```text
+app=redis
+```
+
+Pod Affinity ищет другие Pod'ы по их **labels**.
+
+---
+
+## topologyKey
+
+Для Pod Affinity Kubernetes должен понимать, что означает **«рядом»**.
+
+Для этого используется:
+
+```yaml
+topologyKey: kubernetes.io/hostname
+```
+
+`kubernetes.io/hostname` обычно соответствует конкретной Node.
+
+Поэтому:
+
+```text
+одинаковый hostname
+        ↓
+одна Node
+```
+
+Следовательно, правило может означать:
+
+> Размести этот Pod на той же Node, где уже находится нужный Pod.
+
+---
+
+# 3. Pod Anti-Affinity
+
+**Pod Anti-Affinity** работает наоборот:
+
+> Не размещай этот Pod рядом с определёнными Pod'ами.
+
+Часто используется для **отказоустойчивости**.
+
+Например, есть:
+
+```yaml
+replicas: 3
+```
+
+Без Anti-Affinity теоретически возможно:
+
+```text
+Node 1
+├── Backend 1
+├── Backend 2
+└── Backend 3
+```
+
+Если `Node 1` упадёт, одновременно перестанут работать все три реплики.
+
+Лучше распределить:
+
+```text
+Node 1 → Backend 1
+Node 2 → Backend 2
+Node 3 → Backend 3
+```
+
+Для этого можно использовать **Pod Anti-Affinity**.
+
+Логика:
+
+```text
+Не запускай мой Pod на Node,
+где уже находится Pod моего приложения.
+```
+
+Таким образом реплики распределяются между разными нодами.
+
+---
+
+# Required и Preferred
+
+У Affinity есть два важных типа правил.
+
+## required
+
+```yaml
+requiredDuringSchedulingIgnoredDuringExecution
+```
+
+Это **жёсткое требование**.
+
+Scheduler обязан выполнить условие.
+
+```text
+Scheduler
+    ↓
+ищет Node
+    ↓
+условие выполняется?
+   / \
+ да   нет
+ ↓     ↓
+Run  ищем другую Node
+          ↓
+    ничего не нашли
+          ↓
+       Pending
+```
+
+То есть `required` потенциально может привести к `Pending`.
+
+---
+
+## preferred
+
+```yaml
+preferredDuringSchedulingIgnoredDuringExecution
+```
+
+Это **желательное условие**.
+
+Мы говорим Scheduler:
+
+> Желательно разместить Pod таким образом, но если не получится — всё равно запусти его.
+
+```text
+preferred
+    ↓
+подходящая Node есть?
+   / \
+ да   нет
+ ↓     ↓
+там   можно выбрать
+      другую Node
+```
+
+Поэтому `preferred` значительно реже становится причиной `Pending`.
+
+---
+
+# Что означает IgnoredDuringExecution
+
+Например:
+
+```text
+requiredDuringSchedulingIgnoredDuringExecution
+```
+
+Название можно разбить:
+
+```text
+required
+DuringScheduling
+IgnoredDuringExecution
+```
+
+### DuringScheduling
+
+Правило проверяется в момент, когда Scheduler выбирает Node для Pod.
+
+### IgnoredDuringExecution
+
+После запуска Pod изменение условий не обязательно приведёт к его удалению.
+
+Например:
+
+```text
+Node:
+disk=ssd
+```
+
+Pod требует:
+
+```text
+disk=ssd
+```
+
+Scheduler запускает его.
+
+После этого кто-то меняет label:
+
+```text
+disk=hdd
+```
+
+Уже запущенный Pod не обязан автоматически удаляться только из-за того, что Node перестала соответствовать этому affinity-правилу.
+
+---
+
+# Как Scheduler выбирает Node
+
+Упрощённо процесс выглядит так:
+
+```text
+Deployment
+    ↓
+создаётся Pod
+    ↓
+kube-scheduler
+    ↓
+проверяет Nodes
+    │
+    ├── хватает CPU?
+    ├── хватает RAM?
+    ├── подходят Taints/Tolerations?
+    ├── подходит nodeSelector?
+    ├── подходит Node Affinity?
+    ├── подходит Pod Affinity?
+    ├── подходит Pod Anti-Affinity?
+    └── подходят topology constraints?
+    ↓
+выбирает подходящую Node
+    ↓
+Pod назначается на Node
+    ↓
+запускается контейнер
+```
+
+Если Scheduler не может найти подходящую Node:
+
+```text
+Pod → Pending
+```
+
+---
+
+# Пример Pending из-за Affinity
+
+Допустим, Pod требует:
+
+```text
+environment=prod
+disk=ssd
+```
+
+Есть две ноды:
+
+```text
+node-1:
+environment=prod
+disk=hdd
+
+node-2:
+environment=test
+disk=ssd
+```
+
+`node-1` не подходит из-за:
+
+```text
+disk=hdd
+```
+
+`node-2` не подходит из-за:
+
+```text
+environment=test
+```
+
+Получается:
+
+```text
+Pod
+ ↓
+Scheduler
+ ↓
+node-1 ❌
+node-2 ❌
+ ↓
+нет подходящей Node
+ ↓
+Pending
+```
+
+---
+
+# Как диагностировать
+
+Посмотреть Pod:
+
+```bash
+kubectl get pods -n <namespace>
+```
+
+Посмотреть подробную информацию:
+
+```bash
+kubectl describe pod <pod-name> -n <namespace>
+```
+
+Особенно важно смотреть раздел:
+
+```text
+Events:
+```
+
+Там Scheduler может написать причину:
+
+```text
+0/5 nodes are available:
+5 node(s) didn't match Pod's node affinity
+```
+
+---
+
+Посмотреть доступные ноды:
+
+```bash
+kubectl get nodes
+```
+
+Посмотреть labels нод:
+
+```bash
+kubectl get nodes --show-labels
+```
+
+Подробно посмотреть конкретную Node:
+
+```bash
+kubectl describe node <node-name>
+```
+
+---
+
+# Главное запомнить
+
+```text
+Node
+↓
+машина, на которой работают Pod'ы
+```
+
+```text
+Node Affinity
+↓
+На КАКОЙ Node запускать Pod?
+```
+
+```text
+Pod Affinity
+↓
+С КАКИМИ Pod'ами желательно запускать мой Pod рядом?
+```
+
+```text
+Pod Anti-Affinity
+↓
+С КАКИМИ Pod'ами мой Pod желательно/обязательно НЕ размещать рядом?
+```
+
+```text
+required
+↓
+обязательное правило
+↓
+не получилось выполнить → Pending
+```
+
+```text
+preferred
+↓
+желательное правило
+↓
+не получилось → можно запустить в другом месте
+```
+
+И если Pod завис в:
+
+```text
+Pending
+```
+
+одна из первых команд:
+
+```bash
+kubectl describe pod <pod-name> -n <namespace>
+```
+
+и смотрим:
+
+```text
+Events
+```
+
+Именно там Scheduler обычно объясняет, почему он не смог подобрать Node.
