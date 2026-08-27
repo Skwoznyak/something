@@ -2990,3 +2990,75 @@ Events
 ```
 
 Именно там Scheduler обычно объясняет, почему он не смог подобрать Node.
+
+# Kubernetes CronJob
+
+**CronJob** — ресурс Kubernetes для **запуска задач по расписанию**.
+
+Аналог обычного `cron` в Linux, только задача выполняется внутри Pod.
+
+## Как работает
+
+```text
+CronJob
+   ↓ по расписанию создаёт
+Job
+   ↓ создаёт
+Pod
+   ↓
+выполняет задачу
+   ↓
+Completed
+```
+
+* **CronJob** — отвечает за расписание.
+* **Job** — отвечает за выполнение задачи.
+* **Pod** — непосредственно запускает контейнер с командой.
+
+## CronJob vs Deployment
+
+```text
+Deployment → Pod работает постоянно
+CronJob    → Pod запускается по расписанию, выполняет задачу и завершается
+```
+
+**Deployment:** backend, API, nginx.
+
+**CronJob:** бэкапы, очистка данных, отчёты, синхронизация.
+
+## Пример
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup
+spec:
+  schedule: "0 3 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: backup
+              image: busybox
+              command: ["sh", "-c", "echo backup"]
+          restartPolicy: OnFailure
+```
+
+Расписание:
+
+```text
+*/5 * * * *  → каждые 5 минут
+0 * * * *    → каждый час
+0 3 * * *    → каждый день в 03:00
+0 3 * * 1    → каждый понедельник в 03:00
+```
+
+### Главное
+
+**CronJob = запуск Job по расписанию.**
+
+```text
+CronJob → Job → Pod → выполнение → Completed
+```
